@@ -1314,6 +1314,7 @@ drmmode_remove_fb(ScrnInfoPtr pScrn)
 typedef struct {
 	drmmode_ptr mode;
 	uint32_t old_fb_id;
+	int flip_count;
 	void *priv;
 } drmmode_flipdata_rec, *drmmode_flipdata_ptr;
 
@@ -1322,9 +1323,11 @@ page_flip_handler(int fd, unsigned int sequence, unsigned int tv_sec,
 		unsigned int tv_usec, void *user_data)
 {
 	drmmode_flipdata_ptr flipdata = user_data;
-	OMAPDRI2SwapComplete(flipdata->priv);
-	drmModeRmFB(flipdata->mode->fd, flipdata->old_fb_id);
-	free(flipdata);
+	if (--(flipdata->flip_count) <= 0) {
+		OMAPDRI2SwapComplete(flipdata->priv);
+		drmModeRmFB(flipdata->mode->fd, flipdata->old_fb_id);
+		free(flipdata);
+	}
 }
 
 static drmEventContext event_context = {
@@ -1361,10 +1364,18 @@ drmmode_page_flip(DrawablePtr pDraw, PixmapPtr back, void *priv)
 	flipdata->priv = priv;
 	flipdata->mode = mode;
 	flipdata->old_fb_id = old_fb_id;
+	flipdata->flip_count = 0;
 
 	DEBUG_MSG("flip: %d -> %d", mode->fb_id, old_fb_id);
 
 	/* if we can flip, we must be fullscreen.. so flip all CRTC's.. */
+	for (i = 0; i < config->num_crtc; i++) {
+		crtc = config->crtc[i]->driver_private;
+
+		if (config->crtc[i]->enabled)
+			flipdata->flip_count++;
+	}
+
 	for (i = 0; i < config->num_crtc; i++) {
 		crtc = config->crtc[i]->driver_private;
 
