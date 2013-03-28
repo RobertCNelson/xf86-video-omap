@@ -1386,7 +1386,8 @@ drmmode_page_flip(DrawablePtr pDraw, PixmapPtr back, void *priv)
 				mode->fb_id, DRM_MODE_PAGE_FLIP_EVENT, flipdata);
 		if (ret) {
 			WARNING_MSG("flip queue failed: %s", strerror(errno));
-			return FALSE;
+			free(flipdata);
+			goto error;
 		}
 	}
 
